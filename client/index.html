@@ -1,0 +1,455 @@
+<title>WordBastard</title>
+<style type="text/css">
+body {
+  margin:0px;
+  font-family:'Lucida Grande', verdana, helvetica, arial;
+  font-size:13px;
+  background-color:#f5f5f5;
+  color:#333;
+}
+.source-form {
+  position:absolute;
+  top:0px;
+  height:0px;
+  width:100%;
+  height:100%;
+  background-color:rgba(250, 250, 250, 0.9);
+  display:none;
+  z-index:200;
+}
+.source-form.visible {
+  display:block;
+}
+.source-form .form {
+  position:absolute;
+  background-color:white;
+  left:50%;
+  top:50%;
+  margin-left:-200px;
+  margin-top:-200px;
+  width:400px;
+  height:400px;
+  border:1px solid #ddd;
+}
+.source-form .preview {
+
+}
+.source-form .input {
+  position:absolute;
+  left:50%;
+  margin-left:-150px;
+  bottom:24px;
+  width:300px;
+}
+
+.navbar {
+  position:fixed;
+  left:0px;
+  width:200px;
+  height:100%;
+  padding-top:48px;
+  padding-left:48px;
+  box-sizing:border-box;
+  border-bottom:1px solid #ddd;
+  z-index:100;
+  line-height:24px;
+}
+.navbar .menu {
+  width:180px;
+  cursor:pointer;
+}
+.navbar .new {
+  cursor:pointer;
+}
+.menu-list {
+}
+.menu-list .menu-item {
+  cursor:pointer;
+  font-family:Menlo, "courier new";
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  overflow:hidden;
+  width:178px;
+  font-size:12px;
+  line-height:14px;
+  text-transform:uppercase;
+  letter-spacing:7px;
+  margin-bottom:12px;
+  color:#555;
+  box-sizing:border-box;
+}
+.menu-item:hover {
+  color:#000;
+}
+.menu-item.selected {
+  font-weight:bold;
+  color:#000;
+}
+.menu-item:.selected:hover {
+  background-color:#f8f8f8;
+}
+
+.result {
+  position:absolute;
+  left:250px;
+  margin-top:48px;
+  width:600px;
+}
+.details {
+  position:fixed;
+  left:250px;
+}
+.title {
+  font-size:22px;
+  font-family:Menlo, "courier new", monospace;
+  letter-spacing:16px;
+  font-weight:bold;
+  margin-bottom:24px;
+  text-transform:uppercase;
+}
+.remove {
+  cursor:pointer;
+}
+.remove:hover {
+  text-decoration:underline;
+  color:#000;
+}
+input {
+  font-size:16px;
+  width:120px;
+  margin:0px 0px 0px -2px;
+  padding:0px;
+  border:1px solid #ddd;
+  text-transform:uppercase;
+  font-family:Menlo, "courier new", monospace;
+}
+.main-list {
+  position:absolute;
+  left:200px;
+}
+.display {
+  line-height:24px;
+  font-size:16px;
+  font-family:Menlo, "courier new", monospace;
+  padding-bottom:48px;
+}
+</style>
+<body>
+</body>
+<script src="functions.js"></script>
+<script src="gmbase.js"></script>
+<script src="input.js"></script>
+<script type="text/javascript">
+/**
+ * SourceForm
+ */
+function SourceForm() {}
+SourceForm = GMBase.DOMObject.Constructor('div');
+
+SourceForm.prototype.constructor_ = function() {
+  this.className = 'source-form';
+
+  var form = createElement('div', 'form', this);
+  var preview = createElement('div', 'preview', this);
+  this.input_letters = new InputField("input");
+  this.input_letters.addListener("submit", this.handleSubmit.bind(this));
+  this.input_letters.setPlaceholder("Enter letters");
+  form.appendChild(this.input_letters);
+
+  document.body.appendChild(this);
+};
+
+SourceForm.prototype.handleSubmit = function(data) {
+  console.log("SourceForm.handleSubmit");
+  this.classList.remove('visible');
+  this.notifyListeners("submit", data.toLowerCase());
+  this.input_letters.setValue("");
+};
+
+SourceForm.prototype.setVisible = function() {
+  this.classList.add('visible');
+  this.input_letters.focus();
+};
+
+/**
+ * Result
+ */
+function Result(letters, results) {}
+Result = GMBase.DOMObject.Constructor('div');
+Result.GRID_WIDTHS = [1,
+                      1,2,3,2,5,
+                      3,7,4,3,5,
+                      7,4,7,7,5,
+                      4,7,6,7,5,
+                      7,7,5,6,5,
+                      7,9,7,5,6];
+
+Result.prototype.constructor_ = function(letters, results) {
+  this.letters = letters;
+  this.className = 'result';
+
+  this.node_details = createElement('div', 'details', this);
+  this.node_title = createElement('div', 'title', this.node_details);
+  this.node_title.innerHTML = this.generateTitleHTML();
+
+  //this.node_controls = createElement('div', 'controls', this.title);
+  this.node_main_list = createElement('div', 'main-list', this);
+  this.input_filter = new InputField();
+  this.input_filter.setPlaceholder("Filter");
+  this.input_filter.addListener("search", this.handleFilter.bind(this));
+  this.node_details.appendChild(this.input_filter);
+
+  this.node_remove = createElement('div', 'remove', this.node_details);
+  this.node_remove.innerHTML = 'remove';
+  this.node_remove.addEventListener('click', this.handleRemoveClick.bind(this), true);
+
+  this.display = createElement('div', 'display', this.node_main_list);
+  this.results = [];
+  for (var i = 0; i < results.length; i++) {
+    var elm = createElement('div');
+    elm.innerHTML = results[i];
+    this.results.push({
+      value : results[i],
+      node : elm
+    });
+    this.display.appendChild(elm);
+  }
+}
+
+Result.prototype.generateTitleHTML = function() {
+  var title = '';
+  var div = (this.letters.length < 30) ? Result.GRID_WIDTHS[this.letters.length] : 6;
+
+  for (var i = 0; i < this.letters.length; i++) {
+    title += this.letters.charAt(i);
+    if ((i + 1) % div == 0)
+      title += '<br />';
+  }
+  return title;
+};
+
+Result.prototype.show = function() {
+  this.style.display = 'block';
+};
+
+Result.prototype.hide = function() {
+  this.style.display = 'none';
+};
+
+Result.prototype.handleFilter = function(data) {
+  setTimeout(this.updateDisplay.bind(this), 50);
+};
+
+Result.prototype.handleRemoveClick = function() {
+  this.notifyListeners("remove", this);
+};
+
+Result.prototype.updateDisplay = function() {
+  var filter = {};
+  for (var i = 0; i < this.input_filter.value.length; i++) {
+    var letter = this.input_filter.value.charAt(i);
+    if (letter in filter)
+      filter[letter]++;
+    else
+      filter[letter] = 1;
+  }
+
+  function generateReg(letter, count) {
+    var reg_string = "(?=.*";
+    reg_string += letter;
+    if (count > 1)
+      reg_string += generateReg(letter, count - 1);
+    reg_string += ")";
+    return reg_string;
+  };
+
+  var regex;
+  if (filter) {
+    var reg_string = "^";
+    for (var letter in filter) {
+      reg_string += generateReg(letter, filter[letter])
+    }
+    window.console.log(reg_string);
+    regex = new RegExp(reg_string, "i");
+  }
+
+  for (var i = 0; i < this.results.length; i++) {
+    if (!regex || this.results[i].value.match(regex)) {
+      this.results[i].node.style.display = 'block';
+    } else {
+      this.results[i].node.style.display = 'none';
+    }
+  }
+};
+
+Result.prototype.remove = function() {
+  document.body.removeChild(this);
+  delete this.input_filter;
+  delete this.display;
+  delete this.results;
+  delete this.menu_item;
+};
+
+
+/**
+ * Local
+ */
+function Local() {
+  if (!('cache' in window.localStorage))
+    this.cache = {}
+  else {
+    try {
+      this.cache = JSON.parse(window.localStorage['cache']);
+    } catch(e) {
+      this.cache = {};
+      this.save();
+    }
+  }
+}
+
+Local.prototype.setCache = function(letters, results) {
+  this.cache[letters] = results;
+  this.save();
+};
+
+Local.prototype.getCache = function(letters) {
+  return this.cache[letters];
+};
+
+Local.prototype.deleteCache = function(letters) {
+  delete this.cache[letters];
+  this.save();
+};
+
+Local.prototype.save = function() {
+  window.localStorage['cache'] = JSON.stringify(this.cache);
+};
+
+/**
+ * NavBar
+ */
+function NavBar() {}
+NavBar = GMBase.DOMObject.Constructor('div');
+
+NavBar.prototype.constructor_ = function() {
+  this.className = 'navbar';
+  
+  this.menu_items = {};
+  this.node_list = createElement('div', 'menu-list', this);
+
+  this.node_new = createElement('div', 'new', this);
+  this.node_new.innerHTML = 'New';
+  this.node_new.addEventListener('click', this.handleNewClick.bind(this), true);
+
+  document.body.appendChild(this);
+};
+
+NavBar.prototype.handleNewClick = function() {
+  this.notifyListeners("new-clicked", {});
+};
+
+NavBar.prototype.addResultItem = function(result) {
+  var item = createElement('div', 'menu-item');
+  item.innerHTML = result.generateTitleHTML();
+  item.addEventListener('click', this.handleItemClicked.bind(this, result), true);
+  this.menu_items[result.letters] = item;
+  this.node_list.appendChild(item);
+};
+
+NavBar.prototype.handleItemClicked = function(result) {
+  this.notifyListeners("item-clicked", result);
+};
+
+NavBar.prototype.removeResultItem = function(result) {
+  var item = this.menu_items[result.letters];
+  this.node_list.removeChild(item);
+};
+
+NavBar.prototype.unselectResultItem = function(result) {
+  var item = this.menu_items[result.letters];
+  item.classList.remove('selected');
+};
+
+NavBar.prototype.selectResultItem = function(result) {
+  var item = this.menu_items[result.letters];
+  item.classList.add('selected');
+};
+
+/**
+ * WordClient
+ */
+function WordClient() {
+  this.local = new Local();
+  this.results = {};
+  this.sourceForm = new SourceForm();
+  this.navbar = new NavBar();
+  this.navbar.addListener('new-clicked', this.handleNewClicked.bind(this));
+  this.navbar.addListener('item-clicked', this.handleItemClicked.bind(this));
+
+  this.sourceForm.addListener('submit', this.handleSource.bind(this));
+
+  this.visible;
+  for (var letters in this.local.cache) {
+    var res = this.createResult(letters, this.local.cache[letters]);
+    res.hide();
+  }
+}
+
+WordClient.prototype.handleSource = function(letters) {
+  if (letters in this.local.cache) {
+    var res = this.createResult(letters, this.local.getCache(letters));
+    this.setVisible(res);
+  } else {
+    var req = new XMLHttpRequest();
+    req.open("GET", "/solve/" + letters, true);
+    req.onreadystatechange = (function() {
+      if (req.readyState == 4 && req.status == 200) {
+        var result = req.responseText.split("\n");
+        this.local.setCache(letters, result);
+        varres = this.createResult(letters, result);
+        setTimeout(this.setVisible.bind(this, res), 50);
+      }
+    }).bind(this);
+    req.send();
+  }
+};
+
+WordClient.prototype.handleNewClicked = function() {
+  this.sourceForm.setVisible();
+};
+
+WordClient.prototype.handleItemClicked = function(result) {
+  this.setVisible(result);
+};
+
+WordClient.prototype.createResult = function(letters, result) {
+  result.sort(function(a, b) {
+    return b.length - a.length;
+  });
+
+  var res = new Result(letters, result);
+  res.addListener("remove", this.removeResult.bind(this));
+  this.results[letters] = res;
+  this.navbar.addResultItem(res);
+  document.body.appendChild(res);
+  return res;
+};
+
+WordClient.prototype.removeResult = function(result) {
+  this.navbar.removeResultItem(result);
+  this.local.deleteCache(result.letters);
+  result.remove();
+};
+
+WordClient.prototype.setVisible = function(result) {
+  if (this.visible) {
+    this.navbar.unselectResultItem(this.visible);
+    this.visible.hide();
+  }
+  this.navbar.selectResultItem(result);
+  result.show();
+  this.visible = result;
+}
+
+new WordClient();
+</script>
